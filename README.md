@@ -1,14 +1,25 @@
-# ProjectFlow - AI-Powered Project Management
+# ProjectFlow - Advanced AI-Powered Project Management
 
-A modern full-stack project management application with advanced AI integration using NVIDIA NIM.
+A modern full-stack project management application with advanced AI integration using NVIDIA NIM, featuring enterprise-grade capabilities for teams of all sizes.
 
-## Features
+## 🚀 New Advanced Features
 
-### Core Features
-- 📊 **Dashboard** - Overview of all projects with statistics
-- 📁 **Project Management** - Create, view, and manage projects
-- ✅ **Task Management** - Add, update, and track tasks within projects
-- 🤖 **AI Assistant** - Chat with powerful AI models for project insights
+### Core Enhancements
+- 🔐 **User Authentication** - Secure JWT-based authentication with registration and login
+- 👥 **Team Management** - Create teams, add members, and collaborate effectively
+- 💬 **Comments & Discussions** - Threaded comments on tasks and projects
+- 📅 **Sprint Management** - Agile sprint planning, start, and end workflows
+- ⏱️ **Time Tracking** - Log time against tasks with detailed descriptions
+- 🔗 **Task Dependencies** - Define task relationships (finish-to-start, etc.)
+- 🏷️ **Tags & Labels** - Organize projects and tasks with custom tags
+- 📊 **Advanced Analytics** - Burndown charts, velocity tracking, completion rates
+- 🔔 **Notifications** - Real-time notifications for assignments and updates
+- 🎯 **Project Templates** - Create and use templates for recurring project types
+- 📝 **Custom Fields** - Add custom fields to tasks (text, number, date, select, etc.)
+- 🪝 **Webhooks** - Integrate with external tools via webhook events
+- 🔄 **Real-time Updates** - WebSocket support for live collaboration
+- 📈 **Activity Logs** - Complete audit trail of all project activities
+- 📎 **Story Points** - Agile estimation support for tasks
 
 ### AI Features (Powered by NVIDIA NIM)
 - **Multiple AI Models** - Choose from GLM-5.1, Llama 3.1, Mistral Large, and more
@@ -16,6 +27,7 @@ A modern full-stack project management application with advanced AI integration 
 - **Task Suggestions** - Receive intelligent task breakdown suggestions
 - **Reasoning Display** - View the AI's thinking process
 - **Context-Aware Responses** - AI understands your project context
+- **Smart Notifications** - AI-powered insights on project health
 
 ## Tech Stack
 
@@ -23,7 +35,10 @@ A modern full-stack project management application with advanced AI integration 
 - **FastAPI** - Modern Python web framework
 - **NVIDIA NIM** - AI model integration
 - **OpenAI SDK** - Compatible API interface
-- **In-memory Database** - For MVP (can be extended to PostgreSQL/MongoDB)
+- **PyJWT** - JWT authentication
+- **In-memory Database** - For MVP (easily extendable to PostgreSQL/MongoDB)
+- **WebSocket** - Real-time communication
+- **HTTPX** - Async HTTP client for webhooks
 
 ### Frontend
 - **React 19** - Latest React with hooks
@@ -100,24 +115,77 @@ set NVIDIA_API_KEY=nvapi-xxxxx
 
 ## API Endpoints
 
+### Authentication
+- `POST /auth/register` - Register a new user
+- `POST /auth/login` - Login and get JWT token
+- `GET /auth/me` - Get current user info
+
 ### Projects
 - `GET /projects` - List all projects
 - `POST /projects` - Create a new project
 - `GET /projects/{id}` - Get project details
 - `PUT /projects/{id}` - Update project
 - `DELETE /projects/{id}` - Delete project
+- `POST /projects/from-template` - Create project from template
+- `GET /projects/{id}/sprints` - Get project sprints
+- `GET /projects/{id}/custom-fields` - Get project custom fields
 
 ### Tasks
 - `GET /projects/{id}/tasks` - List tasks for a project
 - `POST /tasks` - Create a new task
 - `PUT /tasks/{id}` - Update task
 - `DELETE /tasks/{id}` - Delete task
+- `GET /tasks/{id}/comments` - Get task comments
+- `GET /tasks/{id}/time-entries` - Get task time entries
+- `GET /tasks/{id}/dependencies` - Get task dependencies
+- `POST /tasks/dependencies` - Add task dependency
+- `POST /time-entries` - Log time on a task
+
+### Teams
+- `POST /teams` - Create a team
+- `GET /teams` - List user's teams
+- `POST /teams/{id}/members` - Add member to team
+
+### Comments
+- `POST /comments` - Add a comment
+- `DELETE /comments/{id}` - Delete a comment
+
+### Sprints
+- `POST /sprints` - Create a sprint
+- `PUT /sprints/{id}/start` - Start a sprint
+- `PUT /sprints/{id}/end` - End a sprint
+
+### Tags
+- `POST /tags` - Create a tag
+- `GET /tags` - List all tags
+
+### Templates
+- `POST /templates` - Create a project template
+- `GET /templates` - List all templates
+
+### Custom Fields
+- `POST /custom-fields` - Create a custom field
+
+### Analytics
+- `GET /analytics` - Get comprehensive analytics data
+
+### Notifications
+- `GET /notifications` - Get user notifications
+- `PUT /notifications/{id}/read` - Mark notification as read
+
+### Webhooks
+- `POST /webhooks` - Create a webhook
+- `GET /webhooks` - List webhooks
+- `DELETE /webhooks/{id}` - Delete a webhook
 
 ### AI
 - `GET /ai/models` - List available AI models
 - `POST /ai/chat` - Chat with AI
 - `POST /ai/task-suggestions` - Get task suggestions
 - `POST /ai/project-summary` - Generate project summary
+
+### WebSocket
+- `WS /ws` - Real-time updates connection
 
 ## Available AI Models
 
@@ -215,16 +283,27 @@ npm run build
 
 ## Future Enhancements
 
-- [ ] User authentication and authorization
-- [ ] Real-time collaboration features
-- [ ] File attachments for tasks
-- [ ] Gantt chart view
-- [ ] Team management
-- [ ] Email notifications
-- [ ] Integration with GitHub/GitLab
-- [ ] Time tracking
-- [ ] Custom workflows
-- [ ] Analytics dashboard
+- [ ] PostgreSQL/MongoDB database integration
+- [ ] File attachments for tasks and comments
+- [ ] Gantt chart view with drag-and-drop
+- [ ] Kanban board view
+- [ ] Calendar view for deadlines
+- [ ] Email notifications and digests
+- [ ] Integration with GitHub/GitLab/Bitbucket
+- [ ] Slack/Discord integrations
+- [ ] Advanced role-based permissions
+- [ ] Multi-language support
+- [ ] Dark mode theme
+- [ ] Mobile app (React Native)
+- [ ] Desktop app (Electron)
+- [ ] Advanced reporting and exports
+- [ ] Resource management
+- [ ] Budget tracking and invoicing
+- [ ] Risk management
+- [ ] Goal OKR tracking
+- [ ] AI-powered task auto-assignment
+- [ ] Predictive project completion dates
+- [ ] Automated standup reports
 
 ## License
 
