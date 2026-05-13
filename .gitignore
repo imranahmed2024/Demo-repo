@@ -1,36 +1,26 @@
 ```
 # Dependencies
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-venv/
-.venv/
-.env
-.env.local
-.env.*
+frontend/node_modules/
 
 # Build artifacts
-dist/
-build/
-*.egg-info/
+frontend/dist/
+frontend/build/
 
-# Logs
-*.log
+# Environment variables
+frontend/.env
+frontend/.env.local
+frontend/.env.*
 
-# Editor/IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
+# IDE and editor settings
+frontend/.vscode/
+frontend/.idea/
 
-# Coverage
-.coverage
-coverage/
-htmlcov/
+# Logs and temporary files
+frontend/*.log
+frontend/*.tmp
+frontend/*.swp
 
-# Testing
-.pytest_cache/
-.mypy_cache/
+# OS specific files
+frontend/.DS_Store
+frontend/Thumbs.db
 ```

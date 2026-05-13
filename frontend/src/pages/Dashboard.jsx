@@ -1,167 +1,139 @@
-import { useState } from 'react'
-import { useProjects } from '../api'
+import { useState, useEffect } from 'react'
+import { api } from '../api'
+import { useTheme } from '../contexts/ThemeContext'
 
 export default function Dashboard() {
-  const { projects, loading, addProject, removeProject } = useProjects()
-  const [showModal, setShowModal] = useState(false)
-  const [newProject, setNewProject] = useState({ name: '', description: '', owner_id: 'user1' })
+  const [stats, setStats] = useState({ projects: 0, tasks: 0, completed: 0, pending: 0 })
+  const [recentProjects, setRecentProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const { theme } = useTheme()
 
-  const stats = {
-    totalProjects: projects.length,
-    activeProjects: projects.filter(p => p.status === 'active').length,
-    completedProjects: projects.filter(p => p.status === 'completed').length,
-  }
+  useEffect(() => {
+    loadDashboard()
+  }, [])
 
-  async function handleCreateProject(e) {
-    e.preventDefault()
+  async function loadDashboard() {
     try {
-      await addProject(newProject)
-      setShowModal(false)
-      setNewProject({ name: '', description: '', owner_id: 'user1' })
+      const projects = await api.getProjects()
+      setRecentProjects(projects.slice(0, 3))
+      
+      let totalTasks = 0
+      let completedTasks = 0
+      
+      for (const project of projects) {
+        const tasks = await api.getTasks(project.id)
+        totalTasks += tasks.length
+        completedTasks += tasks.filter(t => t.status === 'done').length
+      }
+
+      setStats({
+        projects: projects.length,
+        tasks: totalTasks,
+        completed: completedTasks,
+        pending: totalTasks - completedTasks
+      })
     } catch (error) {
-      console.error('Failed to create project:', error)
-      alert('Failed to create project. Make sure the backend is running.')
+      console.error('Failed to load dashboard:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="spinner spinner-lg"></div>
       </div>
     )
   }
 
+  const statCards = [
+    { title: 'Total Projects', value: stats.projects, icon: '📁', gradient: 'gradient-primary', color: 'text-primary' },
+    { title: 'Total Tasks', value: stats.tasks, icon: '✅', gradient: 'gradient-purple', color: 'text-purple-600' },
+    { title: 'Completed', value: stats.completed, icon: '✓', gradient: 'gradient-success', color: 'text-green-600' },
+    { title: 'Pending', value: stats.pending, icon: '⏳', gradient: 'gradient-warning', color: 'text-yellow-600' },
+  ]
+
   return (
-    <div>
-      {/* Header */}
+    <div className="animate-fade-in">
+      {/* Welcome Section */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-dark-800 mb-2">Dashboard</h1>
-        <p className="text-dark-500">Welcome to your AI-powered project management workspace</p>
+        <h1 className={`text-4xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-dark-800'}`}>
+          Dashboard
+        </h1>
+        <p className={`${theme === 'dark' ? 'text-dark-400' : 'text-dark-500'}`}>
+          Overview of your projects and tasks
+        </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="card bg-gradient-to-br from-primary-500 to-primary-700 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-primary-100 text-sm">Total Projects</p>
-              <p className="text-3xl font-bold mt-1">{stats.totalProjects}</p>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {statCards.map((stat, index) => (
+          <div
+            key={stat.title}
+            className="card card-hover animate-scale-in"
+            style={{ animationDelay: `${index * 100}ms` }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-dark-400' : 'text-dark-500'} mb-1`}>
+                  {stat.title}
+                </p>
+                <p className={`text-3xl font-bold ${theme === 'dark' ? 'text-white' : 'text-dark-800'}`}>
+                  {stat.value}
+                </p>
+              </div>
+              <div className={`w-14 h-14 ${stat.gradient} rounded-2xl flex items-center justify-center shadow-glow`}>
+                <span className="text-2xl">{stat.icon}</span>
+              </div>
             </div>
-            <div className="text-4xl">📁</div>
           </div>
-        </div>
-
-        <div className="card bg-gradient-to-br from-green-500 to-green-700 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-green-100 text-sm">Active Projects</p>
-              <p className="text-3xl font-bold mt-1">{stats.activeProjects}</p>
-            </div>
-            <div className="text-4xl">✅</div>
-          </div>
-        </div>
-
-        <div className="card bg-gradient-to-br from-purple-500 to-purple-700 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-purple-100 text-sm">Completed</p>
-              <p className="text-3xl font-bold mt-1">{stats.completedProjects}</p>
-            </div>
-            <div className="text-4xl">🎉</div>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Projects Section */}
+      {/* Recent Projects */}
       <div className="card">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-dark-800">Recent Projects</h2>
-          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center space-x-2">
-            <span>+</span>
-            <span>New Project</span>
-          </button>
+          <h2 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-dark-800'}`}>
+            Recent Projects
+          </h2>
+          <a href="/projects" className="btn-outline btn-sm">View All →</a>
         </div>
 
-        {projects.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📂</div>
-            <p className="text-dark-500 mb-4">No projects yet</p>
-            <button onClick={() => setShowModal(true)} className="btn-primary">
-              Create Your First Project
-            </button>
+        {recentProjects.length === 0 ? (
+          <div className={`text-center py-12 ${theme === 'dark' ? 'text-dark-400' : 'text-dark-500'}`}>
+            <div className="text-6xl mb-4">📁</div>
+            <p>No projects yet</p>
+            <a href="/projects" className="btn-primary mt-4 inline-block">Create Your First Project</a>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map((project) => (
-              <div key={project.id} className="border border-dark-100 rounded-lg p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-semibold text-dark-800">{project.name}</h3>
-                  <button
-                    onClick={() => removeProject(project.id)}
-                    className="text-red-500 hover:text-red-700 text-sm"
-                  >
-                    🗑️
-                  </button>
-                </div>
-                <p className="text-dark-500 text-sm mb-3">{project.description || 'No description'}</p>
+          <div className="space-y-4">
+            {recentProjects.map((project, index) => (
+              <a
+                key={project.id}
+                href={`/projects/${project.id}`}
+                className="block p-4 rounded-xl border border-border hover-lift transition-all duration-200"
+                style={{ 
+                  backgroundColor: theme === 'dark' ? 'hsl(var(--dark-800))' : 'hsl(var(--muted))',
+                  animationDelay: `${(index + 4) * 100}ms` 
+                }}
+              >
                 <div className="flex items-center justify-between">
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    project.status === 'active' 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {project.status}
-                  </span>
-                  <a href={`/projects/${project.id}`} className="text-primary-600 hover:text-primary-700 text-sm">
-                    View →
-                  </a>
+                  <div>
+                    <h3 className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-dark-800'}`}>
+                      {project.name}
+                    </h3>
+                    <p className={`text-sm ${theme === 'dark' ? 'text-dark-400' : 'text-dark-500'}`}>
+                      {project.description || 'No description'}
+                    </p>
+                  </div>
+                  <span className="badge badge-primary">View →</span>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         )}
       </div>
-
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Create New Project</h2>
-            <form onSubmit={handleCreateProject}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-dark-700 mb-2">Project Name</label>
-                <input
-                  type="text"
-                  value={newProject.name}
-                  onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                  className="input-field"
-                  required
-                />
-              </div>
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-dark-700 mb-2">Description</label>
-                <textarea
-                  value={newProject.description}
-                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                  className="input-field"
-                  rows="3"
-                />
-              </div>
-              <div className="flex space-x-3">
-                <button type="submit" className="btn-primary flex-1">Create Project</button>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="btn-secondary flex-1"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
