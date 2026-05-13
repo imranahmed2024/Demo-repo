@@ -1,26 +1,24 @@
 ```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 # Dependencies
-frontend/node_modules/
+venv/
+.venv/
 
-# Build artifacts
-frontend/dist/
-frontend/build/
+# Logs and temp files
+*.log
+*.tmp
 
-# Environment variables
-frontend/.env
-frontend/.env.local
-frontend/.env.*
+# Environment
+.env
+.env.local
+*.env.*
 
-# IDE and editor settings
-frontend/.vscode/
-frontend/.idea/
-
-# Logs and temporary files
-frontend/*.log
-frontend/*.tmp
-frontend/*.swp
-
-# OS specific files
-frontend/.DS_Store
-frontend/Thumbs.db
+# Editors
+.vscode/
+.idea/
 ```

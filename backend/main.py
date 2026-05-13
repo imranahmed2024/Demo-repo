@@ -1,33 +1,48 @@
-from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, Field, EmailStr
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from pydantic import BaseModel, Field, EmailStr, HttpUrl
 from typing import List, Optional, Dict, Any, Literal
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 import uuid
 import os
 import jwt
-import hashlib
+import secrets
+import re
 from openai import OpenAI
 from collections import defaultdict
 import json
+import bcrypt
+from slowapi import SlowAPI, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 app = FastAPI(title="ProjectFlow - Advanced AI-Powered Project Management")
 
-# CORS middleware
+# Rate limiter
+rate_limiter = SlowAPI()
+app.state.limiter = rate_limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS middleware - restrict to specific origins in production
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Security
 security = HTTPBearer()
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable must be set")
 ALGORITHM = "HS256"
+TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES", "60"))
 
 # In-memory database
 projects_db: Dict[str, dict] = {}
@@ -101,10 +116,22 @@ class ActivityType(str, Enum):
 
 # Pydantic models
 class UserCreate(BaseModel):
-    email: str
-    password: str
-    name: str
+    email: EmailStr
+    password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
+    name: str = Field(..., min_length=1, max_length=100)
     role: str = "member"
+    
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one digit")
+        return v
 
 class User(BaseModel):
     id: str
@@ -349,26 +376,35 @@ class AnalyticsData(BaseModel):
 
 # Helper functions
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash password using bcrypt with automatic salt generation"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
 
 def verify_password(password: str, hashed: str) -> bool:
-    return hash_password(password) == hashed
+    """Verify password against bcrypt hash"""
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+    except Exception:
+        return False
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=7)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     try:
         token = credentials.credentials
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["exp"]})
         user_id = payload.get("sub")
         if not user_id or user_id not in users_db:
             raise HTTPException(status_code=401, detail="Invalid authentication")
         return users_db[user_id]
-    except:
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+    except Exception:
         raise HTTPException(status_code=401, detail="Invalid authentication")
 
 def log_activity(entity_type: str, entity_id: str, action: str, user_id: str, user_name: str, details: dict):
@@ -435,7 +471,7 @@ def get_nvidia_client():
 
 # Project endpoints
 @app.post("/projects", response_model=Project)
-async def create_project(project: ProjectCreate):
+async def create_project(project: ProjectCreate, current_user: dict = Depends(get_current_user)):
     project_id = str(uuid.uuid4())
     now = datetime.now()
     
@@ -450,20 +486,26 @@ async def create_project(project: ProjectCreate):
     }
     
     projects_db[project_id] = project_data
+    log_activity("project", project_id, "created", current_user["id"], current_user["name"], {"project_name": project.name})
     return project_data
 
 @app.get("/projects", response_model=List[Project])
-async def list_projects():
-    return list(projects_db.values())
+async def list_projects(current_user: dict = Depends(get_current_user)):
+    # Return only projects owned by or accessible to the current user
+    return [p for p in projects_db.values() if p["owner_id"] == current_user["id"] or current_user["role"] == "admin"]
 
 @app.get("/projects/{project_id}", response_model=Project)
-async def get_project(project_id: str):
+async def get_project(project_id: str, current_user: dict = Depends(get_current_user)):
     if project_id not in projects_db:
         raise HTTPException(status_code=404, detail="Project not found")
-    return projects_db[project_id]
+    project = projects_db[project_id]
+    # Check authorization
+    if project["owner_id"] != current_user["id"] and current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+    return project
 
 @app.put("/projects/{project_id}", response_model=Project)
-async def update_project(project_id: str, project_update: dict):
+async def update_project(project_id: str, project_update: dict, current_user: dict = Depends(get_current_user)):
     if project_id not in projects_db:
         raise HTTPException(status_code=404, detail="Project not found")
     
@@ -472,12 +514,19 @@ async def update_project(project_id: str, project_update: dict):
         if key in projects_db[project_id]:
             projects_db[project_id][key] = value
     
+    log_activity("project", project_id, "updated", current_user["id"], current_user["name"], {"updates": project_update})
     return projects_db[project_id]
 
 @app.delete("/projects/{project_id}")
-async def delete_project(project_id: str):
+async def delete_project(project_id: str, current_user: dict = Depends(get_current_user)):
     if project_id not in projects_db:
         raise HTTPException(status_code=404, detail="Project not found")
+    
+    project = projects_db[project_id]
+    if project["owner_id"] != current_user["id"] and current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to delete this project")
+    
+    log_activity("project", project_id, "deleted", current_user["id"], current_user["name"], {})
     del projects_db[project_id]
     return {"message": "Project deleted"}
 
@@ -659,46 +708,56 @@ async def list_ai_models():
 # Authentication endpoints
 @app.post("/auth/register", response_model=User)
 async def register_user(user: UserCreate):
-    if user.email in [u["email"] for u in users_db.values()]:
-        raise HTTPException(status_code=400, detail="Email already registered")
+    # Check if email already exists (case-insensitive)
+    email_lower = user.email.lower()
+    for u in users_db.values():
+        if u["email"].lower() == email_lower:
+            raise HTTPException(status_code=400, detail="Email already registered")
     
+    # Validate role
+    allowed_roles = ["member", "admin"]
+    if user.role not in allowed_roles:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {allowed_roles}")
+
     user_id = str(uuid.uuid4())
-    now = datetime.now()
-    
+    now = datetime.now(timezone.utc)
+
     user_data = {
         "id": user_id,
-        "email": user.email,
+        "email": email_lower,
         "password": hash_password(user.password),
-        "name": user.name,
+        "name": user.name.strip(),
         "role": user.role,
         "avatar_url": None,
         "created_at": now,
         "last_login": None
     }
-    
+
     users_db[user_id] = user_data
     log_activity("user", user_id, "created", user_id, user.name, {"action": "User registered"})
-    
+
     return {k: v for k, v in user_data.items() if k != "password"}
 
 @app.post("/auth/login", response_model=Token)
 async def login(credentials: UserLogin):
+    email_lower = credentials.email.lower()
     user = None
     for u in users_db.values():
-        if u["email"] == credentials.email and verify_password(credentials.password, u["password"]):
+        if u["email"].lower() == email_lower and verify_password(credentials.password, u["password"]):
             user = u
             break
-    
+
     if not user:
+        log_activity("auth", "login_attempt", "failed", "unknown", "unknown", {"email": email_lower})
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    
+
     access_token = create_access_token({"sub": user["id"], "email": user["email"]})
-    users_db[user["id"]]["last_login"] = datetime.now()
-    
+    users_db[user["id"]]["last_login"] = datetime.now(timezone.utc)
+
     user_without_password = {k: v for k, v in user.items() if k != "password"}
-    
+
     log_activity("user", user["id"], "logged_in", user["id"], user["name"], {"action": "User logged in"})
-    
+
     return Token(
         access_token=access_token,
         token_type="bearer",
